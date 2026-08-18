@@ -9,6 +9,10 @@ vim.pack.add({
   { src = 'https://github.com/nvim-lua/plenary.nvim' },
   { src = 'https://github.com/nvim-telescope/telescope.nvim' },
   { src = 'https://github.com/Saghen/blink.cmp', version = vim.version.range('1.*') },
+  -- $VIMRUNTIME/indent/python.vim dates to 2005 and puts continuation lines a
+  -- double shiftwidth in, with the closing bracket under the last argument.
+  -- This replaces it with PEP8/black layout.
+  { src = 'https://github.com/Vimjas/vim-python-pep8-indent' },
   { src = 'https://github.com/lewis6991/gitsigns.nvim' },
   { src = 'https://github.com/nvim-lualine/lualine.nvim' },
   { src = 'https://github.com/folke/which-key.nvim' },
@@ -29,6 +33,15 @@ vim.api.nvim_create_autocmd('PackChanged', {
 })
 
 vim.o.foldlevel = 99
+
+-- Indentation ---
+-- Neovim's raw defaults are sw=8/ts=8/noexpandtab, which is what makes Lua,
+-- JSON and Dart buffers jump 8 columns per level and insert hard tabs. Python
+-- is unaffected either way: $VIMRUNTIME/ftplugin/python.vim forces 4/expandtab.
+vim.o.expandtab = true
+vim.o.shiftwidth = 2
+vim.o.tabstop = 2
+vim.o.softtabstop = 2
 
 require('nvim-treesitter').install({ 'python', 'dart' })
 require('rose-pine').setup({
@@ -86,6 +99,11 @@ require('flutter-icons').setup()
 
 -- Completion ---
 require('blink.cmp').setup({
+  keymap = {
+    -- <Tab> accepts the selected item; the 'default' preset only uses <Tab>
+    -- to jump snippet placeholders. <C-y> accepts under either preset.
+    preset = 'super-tab',
+  },
   sources = {
     -- renders Icons.*/Symbols.* glyphs inline in completion docs
     transform_items = require('flutter-icons').transform_items,
@@ -98,6 +116,17 @@ require('conform').setup({
     python = { 'ruff_format' },
   },
 })
+
+-- lsp_format = 'fallback' covers filetypes absent from formatters_by_ft above,
+-- e.g. Dart, which dartls formats itself.
+-- <leader>cf, not <leader>f: the latter is the telescope prefix below, and
+-- making it a mapping too would stall every <leader>f* binding for 'timeoutlen'.
+vim.keymap.set({ 'n', 'x' }, '<leader>cf', function()
+  require('conform').format({ async = true, lsp_format = 'fallback' })
+end, { desc = 'Format buffer/selection' })
+
+-- Route the built-in `gq` operator through conform too.
+vim.o.formatexpr = "v:lua.require'conform'.formatexpr()"
 
 -- Telescope ---
 require('telescope').setup()
