@@ -15,6 +15,9 @@ vim.pack.add({
   { src = 'https://github.com/echasnovski/mini.nvim' },
   { src = 'https://github.com/stevearc/conform.nvim' },
   { src = 'https://github.com/folke/todo-comments.nvim' },
+  { src = 'https://github.com/nvim-flutter/flutter-tools.nvim' },
+  { src = 'https://github.com/folke/snacks.nvim' },
+  { src = 'https://github.com/sidlatau/flutter-icons.nvim' },
 })
 
 vim.api.nvim_create_autocmd('PackChanged', {
@@ -27,7 +30,7 @@ vim.api.nvim_create_autocmd('PackChanged', {
 
 vim.o.foldlevel = 99
 
-require('nvim-treesitter').install({ 'python' })
+require('nvim-treesitter').install({ 'python', 'dart' })
 require('rose-pine').setup({
   palette = {
     main = { base = '#000000' },
@@ -51,8 +54,43 @@ vim.api.nvim_create_autocmd('LspAttach', {
   end,
 })
 
+-- Extend the built-in gr* keymaps with definition/declaration (core leaves
+-- these unbound so as to not clobber the legacy gd/gD).
+vim.api.nvim_create_autocmd('LspAttach', {
+  callback = function(args)
+    local opts = { buffer = args.buf }
+    vim.keymap.set('n', 'grd', vim.lsp.buf.definition, opts)
+    vim.keymap.set('n', 'grD', vim.lsp.buf.declaration, opts)
+  end,
+})
+
+-- File explorer (snacks.nvim) ---
+-- Also doubles as the image backend for flutter-icons below, hence being
+-- configured up here instead of in the Flutter section.
+require('snacks').setup({
+  image = { enabled = true },
+  explorer = {}, -- sidebar tree; replaces netrw
+})
+vim.keymap.set('n', '<leader>e', function() Snacks.explorer() end, { desc = 'Explorer' })
+
+-- Flutter / Dart ---
+-- flutter-tools configures dartls itself; it deliberately isn't wired up
+-- through vim.lsp.enable above.
+require('flutter-tools').setup({
+  fvm = true, -- use <workspace>/.fvm/flutter_sdk when present
+  lsp = {
+    capabilities = require('blink.cmp').get_lsp_capabilities(),
+  },
+})
+require('flutter-icons').setup()
+
 -- Completion ---
-require('blink.cmp').setup()
+require('blink.cmp').setup({
+  sources = {
+    -- renders Icons.*/Symbols.* glyphs inline in completion docs
+    transform_items = require('flutter-icons').transform_items,
+  },
+})
 
 -- Formatting ---
 require('conform').setup({
