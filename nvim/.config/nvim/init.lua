@@ -146,7 +146,36 @@ vim.keymap.set({ 'x', 'o' }, 'ac', function() ts_select.select_textobject('@clas
 vim.keymap.set({ 'x', 'o' }, 'ic', function() ts_select.select_textobject('@class.inner', 'textobjects') end)
 
 -- Git ---
-require('gitsigns').setup()
+require('gitsigns').setup({
+  on_attach = function(bufnr)
+    local gitsigns = require('gitsigns')
+    local function map(mode, l, r, opts)
+      opts = opts or {}
+      opts.buffer = bufnr
+      vim.keymap.set(mode, l, r, opts)
+    end
+
+    -- Hunk navigation; falls back to the builtin diff-mode ]c/[c when a
+    -- window actually has 'diff' set (e.g. inside :Gitsigns diffthis).
+    map('n', ']c', function()
+      if vim.wo.diff then
+        vim.cmd.normal({ ']c', bang = true })
+      else
+        gitsigns.nav_hunk('next')
+      end
+    end, { desc = 'Next hunk' })
+    map('n', '[c', function()
+      if vim.wo.diff then
+        vim.cmd.normal({ '[c', bang = true })
+      else
+        gitsigns.nav_hunk('prev')
+      end
+    end, { desc = 'Previous hunk' })
+
+    map('n', '<leader>hp', gitsigns.preview_hunk, { desc = 'Preview hunk' })
+    map('n', '<leader>hd', gitsigns.diffthis, { desc = 'Diff this' })
+  end,
+})
 
 -- Statusline ---
 require('lualine').setup({
