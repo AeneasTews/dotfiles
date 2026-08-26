@@ -115,12 +115,14 @@ require('blink.cmp').setup({
 -- Formatting ---
 require('conform').setup({
   formatters_by_ft = {
-    python = { 'ruff_format' },
+    python = { 'ruff_organize_imports', 'ruff_format' },
+    -- Explicit (rather than relying on the dartls lsp_format fallback below)
+    -- so it works the moment a buffer opens, before dartls finishes attaching.
+    dart = { 'dart_format' },
   },
 })
 
--- lsp_format = 'fallback' covers filetypes absent from formatters_by_ft above,
--- e.g. Dart, which dartls formats itself.
+-- lsp_format = 'fallback' covers filetypes absent from formatters_by_ft above.
 -- <leader>cf, not <leader>f: the latter is the telescope prefix below, and
 -- making it a mapping too would stall every <leader>f* binding for 'timeoutlen'.
 vim.keymap.set({ 'n', 'x' }, '<leader>cf', function()
@@ -130,6 +132,60 @@ end, { desc = 'Format buffer/selection' })
 -- Route the built-in `gq` operator through conform too.
 vim.o.formatexpr = "v:lua.require'conform'.formatexpr()"
 
+-- `dart format` (and so conform's dart_format/dartls above) deliberately
+-- never rewraps comment prose -- including /// doc comments -- to avoid
+-- mangling markdown/code samples inside them. That also means routing `gq`
+-- through conform (above) is useless on doc comments: it just reruns
+-- `dart format` and diffs, which touches nothing there. For dart buffers,
+-- give `gq` back to Neovim's built-in formatter instead: the bundled dart
+-- ftplugin already sets 'comments' to recognize `///`/`//` leaders, it just
+-- needs 'formatexpr' out of the way and a 'textwidth' to wrap to.
+--
+-- A plain '' would normally mean "use the internal formatter", but dartls
+-- specifically treats an empty formatexpr as unset and stomps it back to
+-- v:lua.vim.lsp.formatexpr() on attach (see is_empty_or_default() in
+-- $VIMRUNTIME/lua/vim/lsp.lua). So use a function that always defers to the
+-- internal formatter (returning 1) instead -- non-empty is enough to make
+-- dartls leave it alone.
+function _G.__dart_native_formatexpr()
+  return 1
+end
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = 'dart',
+  callback = function()
+    vim.opt_local.formatexpr = 'v:lua.__dart_native_formatexpr()'
+    vim.opt_local.textwidth = 80
+  end,
+})
+
+-- `gqap`/`gqip` reformat the whole paragraph under the cursor, but a dartdoc
+-- comment normally sits directly above the thing it documents with no blank
+-- line between them -- so "the paragraph" includes the code line right
+-- after the comment, and gq drags it into the wrapped text. <leader>cq
+-- instead walks up/down from the cursor over contiguous `//`-leader lines
+-- only, and wraps just those.
+vim.keymap.set('n', '<leader>cq', function()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local total = vim.api.nvim_buf_line_count(bufnr)
+  local function get(l)
+    return vim.api.nvim_buf_get_lines(bufnr, l - 1, l, false)[1]
+  end
+  local function is_comment(l)
+    return l >= 1 and l <= total and get(l):match('^%s*//') ~= nil
+  end
+  local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  if not is_comment(lnum) then
+    return vim.notify('Not in a `//` comment', vim.log.levels.WARN)
+  end
+  local first, last = lnum, lnum
+  while is_comment(first - 1) do first = first - 1 end
+  while is_comment(last + 1) do last = last + 1 end
+  vim.api.nvim_win_set_cursor(0, { first, 0 })
+  vim.cmd('normal! V')
+  vim.api.nvim_win_set_cursor(0, { last, 0 })
+  vim.cmd('normal! gq')
+end, { desc = 'Format doc comment block' })
+
 -- Telescope ---
 require('telescope').setup()
 
@@ -137,6 +193,21 @@ vim.keymap.set('n', '<leader>ff', require('telescope.builtin').find_files)
 vim.keymap.set('n', '<leader>fg', require('telescope.builtin').live_grep)
 vim.keymap.set('n', '<leader>fb', require('telescope.builtin').buffers)
 vim.keymap.set('n', '<leader>fh', require('telescope.builtin').help_tags)
+
+-- Grep the source of installed packages, which <leader>fg can't reach: ripgrep
+-- skips `.venv` for being a dotdir, and uv writes a `.gitignore` containing `*`
+-- inside it, so both --hidden and --no-ignore are needed.
+vim.keymap.set('n', '<leader>fd', function()
+  local venv = vim.env.VIRTUAL_ENV or vim.fs.joinpath(vim.fn.getcwd(), '.venv')
+  local dirs = vim.fn.glob(vim.fs.joinpath(venv, 'lib', 'python*', 'site-packages'), false, true)
+  if vim.tbl_isempty(dirs) then
+    return vim.notify('No site-packages found under ' .. venv, vim.log.levels.WARN)
+  end
+  require('telescope.builtin').live_grep({
+    search_dirs = dirs,
+    additional_args = { '--hidden', '--no-ignore' },
+  })
+end, { desc = 'Grep installed packages' })
 
 -- Treesitter textobjects ---
 -- Bound to `m`/`c` (not `f`/`a`) to avoid clashing with mini.ai's
