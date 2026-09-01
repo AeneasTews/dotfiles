@@ -22,6 +22,8 @@ vim.pack.add({
   { src = 'https://github.com/nvim-flutter/flutter-tools.nvim' },
   { src = 'https://github.com/folke/snacks.nvim' },
   { src = 'https://github.com/sidlatau/flutter-icons.nvim' },
+  -- Rendered markdown, incl. a synced-scroll split preview (:Markview splitToggle).
+  { src = 'https://github.com/OXY2DEV/markview.nvim' },
 })
 
 vim.api.nvim_create_autocmd('PackChanged', {
@@ -43,7 +45,7 @@ vim.o.shiftwidth = 2
 vim.o.tabstop = 2
 vim.o.softtabstop = 2
 
-require('nvim-treesitter').install({ 'python', 'dart' })
+require('nvim-treesitter').install({ 'python', 'dart', 'markdown', 'markdown_inline' })
 require('rose-pine').setup({
   palette = {
     main = { base = '#000000' },
@@ -193,3 +195,10 @@ require('mini.move').setup()
 
 -- TODO/FIXME/NOTE highlighting ---
 require('todo-comments').setup()
+
+-- Markdown preview ---
+-- Renders headings/tables/code blocks/etc. in-buffer via treesitter + text
+-- (no image protocol needed). `splitToggle` opens a synced-scroll rendered
+-- preview beside the raw source.
+require('markview').setup()
+vim.keymap.set('n', '<leader>mp', '<cmd>Markview splitToggle<cr>', { desc = 'Markdown preview' })
